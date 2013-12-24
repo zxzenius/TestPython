@@ -34,7 +34,7 @@ def IntoMySQL(xlsFile):
     CHARACTER SET utf8
     ''')
     #check if doorevent table is exist
-    #cur.execute('DROP TABLE IF EXISTS door_event')
+    cur.execute('DROP TABLE IF EXISTS door_event')
     #create attendance table
     cur.execute('''CREATE TABLE IF NOT EXISTS door_event(
     event_code INT(10) unsigned AUTO_INCREMENT,
@@ -42,7 +42,7 @@ def IntoMySQL(xlsFile):
     card_id   INT(8) unsigned,
     PRIMARY KEY (event_code)
     )
-    ENGINE = MyISAM
+    ENGINE = InnoDB
     CHARACTER SET utf8
     ''')
     con.commit()
@@ -60,14 +60,14 @@ def IntoMySQL(xlsFile):
         if (xlsRow.Row == 1) or (staffName is None):
             continue
         cur.execute('SELECT card_id FROM staff WHERE name=%s', (staffName,))
-        if cur.fetchone() == None:
+        if cur.fetchone() is None:
             cur.execute('INSERT INTO staff(card_id, name) VALUES (%s, %s)', (cardID, staffName))
         cur.execute('INSERT INTO door_event(time, card_id) VALUES (%s, %s)', (atTime, cardID))
         #print(atTime, staffName)
-    #con.commit()
+    con.commit()
     #Close File & Process
     xlsWorkbook.Close()
-    xlsApp.Quit()
+    #xlsApp.Quit()
     xlsApp = None
     # cur.execute('SELECT date(time), name FROM attendance NATURAL JOIN staff')
     # someday = datetime.date(2013, 4, 8)
@@ -80,7 +80,7 @@ def IntoMySQL(xlsFile):
 
 
 if __name__ == '__main__':
-    xlsFile = 'd:\\Work\\dev\\EXCEL\\9月份门禁卡通行情况.xls'
+    xlsFile = 'd:\\Work\\dev\\EXCEL\\11月份门禁卡通行情况.xls'
 
 
     #LinkExcel(xlsFile)
