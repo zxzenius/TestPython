@@ -80,7 +80,7 @@ def IntoMySQL(xlsFile):
 
 
 if __name__ == '__main__':
-    xlsFile = 'd:\\Work\\dev\\EXCEL\\11月份门禁卡通行情况.xls'
+    xlsFile = 'd:\\Work\\dev\\EXCEL\\12月份门禁卡通行情况.xls'
 
 
     #LinkExcel(xlsFile)
