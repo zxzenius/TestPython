@@ -41,7 +41,7 @@ def connect_autocad(file):
                             break
                     continue
                     # Equip
-                if block_name.startswith('equip'):
+                if block_name.startswith('equiptag'):
                     for attr in blockref.GetAttributes():
                         if attr.TagString == 'TAG' and attr.TextString.strip():
                             equip_list.add(attr.TextString.strip())
@@ -65,10 +65,6 @@ def connect_autocad(file):
         acad_doc.Close()
     finally:
         acad_app.Quit()
-        print(counter)
-        #print(len(pipe_list))
-        #print(pipe_list)
-        #print()
         print(strainer_list)
         process_pipedata(pipe_list)
         process_strainer(strainer_list)
@@ -77,20 +73,21 @@ def connect_autocad(file):
 
 
 def unit_number(loop_number):
+    unit_code = int(str(loop_number)[:1])
     #Area 10000~20000 => Unit 4
-    if loop_number < 30000:
+    if unit_code < 30000:
         return 400
         #Area 30000~50000 => Unit 5
-    if loop_number < 60000:
+    if unit_code < 60000:
         return 500
         #Area 60000 => Unit 6
-    if loop_number < 70000:
+    if unit_code < 70000:
         return 600
         #Area 70000 => Unit 7
-    if loop_number < 80000:
+    if unit_code < 80000:
         return 700
         #Area 90000 => Unit 9
-    if loop_number < 100000:
+    if unit_code < 100000:
         return 900
 
 
@@ -131,6 +128,15 @@ def process_strainer(strainer_list):
         strainer_code, strainer_loop, strainer_suffix = re.match('(\w+)-(\d+)(\w*)', strainer).groups()
         strainer_loop = int(strainer_loop)
         print(strainer, strainer_loop)
+
+
+def process_equip(equip_list):
+    print('Processing Equip...')
+    for equip in equip_list:
+        #Equip "EquipCode - Tag Suffix"
+        equip_code, equip_tag, equip_suffix = re.match('(\w+)-(\d+)(\w*)', equip).groups()
+        equip_tag = int(equip_tag)
+        
 
 
 if __name__ == '__main__':
