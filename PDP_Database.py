@@ -5,7 +5,7 @@ import win32com.client
 import re
 
 
-def connect_autocad(file):
+def extract_info_autocad(file):
     acad_progid = 'AutoCAD.Application.16.2'  # For AutoCAD2006
     acad_app = win32com.client.gencache.EnsureDispatch(acad_progid)
     acad_app.Visible = False
@@ -54,12 +54,13 @@ def connect_autocad(file):
                     for attr in blockref.GetAttributes():
                         if attr.TagString == 'FUNCTION' and attr.TextString.strip():
                             inst_func = attr.TextString.strip()
-                            continue
                         if attr.TagString == 'TAG' and attr.TextString.strip():
                             if attr.TextString.strip()[:1].isalpha():  # Except: PSV-MC..
                                 break
                             inst_loop = attr.TextString.strip()
-                            continue
+                            # For Alarm
+                        if attr.TagString.startswith('ALARM'):
+                            pass
                         if inst_func and inst_loop:
                             inst_list.add('-'.join((inst_func, inst_loop)))
                             break
@@ -104,6 +105,7 @@ def process_pipedata(pipe_list):
     for key, loop_list in pipe_dict.items():
         renumber(loop_list)
     print(pipe_dict)
+    into_db(pipe_dict, 'pipe')
 
 
 def process_strainer(strainer_list):
@@ -117,6 +119,7 @@ def process_strainer(strainer_list):
     for key, loop_list in strainer_dict.items():
         renumber(loop_list)
     print(strainer_dict)
+    into_db(strainer_dict, 'strainer')
 
 
 def process_equip(equip_list):
@@ -130,6 +133,7 @@ def process_equip(equip_list):
     for key, loop_list in equip_dict.items():
         renumber(loop_list)
     print(equip_dict)
+    into_db(equip_dict, 'equip')
 
 
 def process_inst(inst_list):
@@ -170,6 +174,7 @@ def process_inst(inst_list):
                 for index in range(len(loop_list)):
                     loop_list[index] = (loop_list[index], loop_dict[loop_list[index]])
     print(inst_dict)
+    into_db(inst_dict, 'inst')
 
 
 def update_dict(key, val, tag_dict):
@@ -198,6 +203,155 @@ def renumber(loop_list):
         area_prev = area_curr
 
 
+def into_db(data_dict, table):
+    print(' '.join(('Into Table', table)))
+    con = mysql.connector.connect(**db_config())
+    cur = con.cursor()
+    cur.execute('DROP TABLE IF EXISTS {tb}'.format(tb=table))
+    cur.execute('''CREATE TABLE IF NOT EXISTS {tb}(
+    event_code INT(10) unsigned AUTO_INCREMENT,
+    tag_code  VARCHAR(6),
+    old_loop  INT(5) unsigned,
+    new_loop  INT(4) unsigned,
+    PRIMARY KEY (event_code)
+    )
+    ENGINE = InnoDB
+    CHARACTER SET utf8
+    '''.format(tb=table))
+    con.commit()
+    for key, val_list in data_dict.items():
+        for old_loop, new_loop in val_list:
+            cur.execute('INSERT INTO {tb}(tag_code, old_loop, new_loop) VALUES (%s, %s, %s)'.format(tb=table),
+                        (key, old_loop, new_loop))
+    con.commit()
+    con.close()
+
+
+def db_config():
+    config = {
+        'user': 'xydbadmin',
+        'password': 'x1nyuan1',
+        'host': '10.4.8.106',
+        'database': 'test'
+    }
+    return config
+
+
+def read_db():
+    print('Extracting Data From Database...')
+    tables = ('pipe', 'equip', 'strainer', 'inst')
+    con = mysql.connector.connect(**db_config())
+    cur = con.cursor()
+    result_list = []
+    for table in tables:
+        cur.execute('SELECT tag_code, old_loop, new_loop FROM {tb} ORDER BY tag_code, old_loop'.format(tb=table))
+        result_list.append([fetch_row for fetch_row in cur])
+    return result_list
+
+
+def convert_list(loop_list, sep=''):
+    result_dict = dict()
+    for tag_code, old_loop, new_loop in loop_list:
+        result_dict[sep.join((tag_code, str(old_loop)))] = sep.join((tag_code, '{0:#04d}'.format(new_loop)))
+    print(result_dict)
+    return result_dict
+
+
+def reform_inst(loop_list):
+    result_dict = dict()
+    for tag_code, old_loop, new_loop in loop_list:
+        if tag_code not in result_dict.keys():
+            result_dict[tag_code] = dict()
+        result_dict[tag_code][str(old_loop)] = '{0:#04d}'.format(new_loop)
+    print(result_dict)
+    return result_dict
+
+
+def update_dwg(dwg_file, pipe_list=[], equip_list=[], str_list=[], inst_list=[]):
+    if pipe_list and equip_list and str_list and inst_list:
+        acad_progid = 'AutoCAD.Application.16.2'  # For AutoCAD2006
+        acad_app = win32com.client.gencache.EnsureDispatch(acad_progid)
+        acad_app.Visible = False
+        acad_docs = acad_app.Documents
+        pipe_dict = convert_list(pipe_list)
+        equip_dict = convert_list(equip_list, '-')
+        str_dict = convert_list(str_list, '-')
+        inst_dict = reform_inst(inst_list)
+        try:
+            print(''.join(('Updating...', dwg_file)))
+            acad_doc = acad_docs.Open(file)
+            acad_entities = acad_doc.ModelSpace
+            counter = 0
+            for acad_entity in acad_entities:
+                if acad_entity.ObjectName == 'AcDbBlockReference':
+                    blockref = win32com.client.CastTo(acad_entity, 'IAcadBlockReference2')
+                    block_name = blockref.EffectiveName.lower()
+                    # Pipe Tag
+                    if block_name == 'tag_number':
+                        attrs = blockref.GetAttributes()
+                        for attr in attrs:
+                            if attr.TagString == 'TAG' and attr.TextString.strip():
+                                pipe_tag, sep, other = attr.TextString.strip().partition('-')
+                                if pipe_tag in pipe_dict.keys():
+                                    attr.TextString = sep.join((pipe_dict[pipe_tag], other))
+                                    counter += 1
+                                break
+                        continue
+                        # Strainer
+                    if block_name.startswith('strainer'):
+                        for attr in blockref.GetAttributes():
+                            if attr.TagString == 'TAG' and attr.TextString.strip():
+                                str_tag, str_suffix = re.match('(\w+-\d+)(\S*)', attr.TextString.strip()).groups()
+                                if str_tag in str_dict.keys():
+                                    attr.TextString = ''.join((str_dict[str_tag], str_suffix))
+                                    counter += 1
+                                break
+                        continue
+                        # Equip
+                    if block_name.startswith('equip'):
+                        for attr in blockref.GetAttributes():
+                            if attr.TagString == 'TAG' and attr.TextString.strip():
+                                equip_tag, equip_suffix = re.match('(\w+-\d+)(\S*)', attr.TextString.strip()).groups()
+                                if equip_tag in equip_dict.keys():
+                                    attr.TextString = ''.join((equip_dict[equip_tag], equip_suffix))
+                                    counter += 1
+                                break
+                        continue
+                        # Inst
+                    if block_name in ('di_local', 'sh_pri_front', 'interlock', 'sc_local'):
+                        inst_func = ''
+                        inst_loop = ''
+                        flag = False
+                        for attr in blockref.GetAttributes():
+                            if attr.TagString == 'FUNCTION' and attr.TextString.strip():
+                                inst_func = attr.TextString.strip()
+                            if attr.TagString == 'TAG' and attr.TextString.strip():
+                                if attr.TextString.strip()[:1].isalpha():  # Except: PSV-MC..
+                                    break
+                                inst_loop, inst_suffix = re.match('(\d+)(\S*)', attr.TextString.strip()).groups()
+                            if inst_func and inst_loop:
+                                flag = True
+                                break
+                        if flag:
+                            if inst_func in inst_dict.keys() and inst_loop in inst_dict[inst_func].keys():
+                                for attr in blockref.GetAttributes():
+                                    if attr.TagString == 'TAG':
+                                        attr.TextString = ''.join((inst_dict[inst_func][inst_loop], inst_suffix))
+                                        counter += 1
+                                        break
+                        continue
+            acad_doc.Save()
+            print(str(counter), ' ok')
+            acad_doc.Close()
+        finally:
+            acad_app.Quit()
+
+
 if __name__ == '__main__':
-    file = 'd:\\Work\\Project\\ShunCheng.SNG.Liq\\PnID\\ShunCheng.SNG.Liq.PnID_2014.0121.dwg'
-    connect_autocad(file)
+    file = 'd:\\Work\\Project\\ShunCheng.SNG.Liq\\PnID\\ShunCheng.SNG.Liq.PnID_2014.0121t.dwg'
+    #extract_info_autocad(file)
+    pipes, equips, strs, insts = read_db()
+    update_dwg(file, pipes, equips, strs, insts)
+    #for tl in read_db():
+    #    convert_list(tl)
+    #    reform_inst(tl)
