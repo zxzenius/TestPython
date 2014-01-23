@@ -3,9 +3,11 @@ import os.path
 import mysql.connector
 import win32com.client
 import re
+import datetime
+import os
 
 
-def extract_info_autocad(file):
+def extract_info_autocad(dwg_file):
     acad_progid = 'AutoCAD.Application.16.2'  # For AutoCAD2006
     acad_app = win32com.client.gencache.EnsureDispatch(acad_progid)
     acad_app.Visible = False
@@ -16,7 +18,7 @@ def extract_info_autocad(file):
     inst_list = set()
     try:
         print('Connecting...')
-        acad_doc = acad_docs.Open(file)
+        acad_doc = acad_docs.Open(dwg_file)
         acad_entities = acad_doc.ModelSpace
         print(acad_entities.Count)
         counter = 0
@@ -52,15 +54,12 @@ def extract_info_autocad(file):
                     inst_func = ''
                     inst_loop = ''
                     for attr in blockref.GetAttributes():
-                        if attr.TagString == 'FUNCTION' and attr.TextString.strip():
-                            inst_func = attr.TextString.strip()
                         if attr.TagString == 'TAG' and attr.TextString.strip():
                             if attr.TextString.strip()[:1].isalpha():  # Except: PSV-MC..
                                 break
                             inst_loop = attr.TextString.strip()
-                            # For Alarm
-                        if attr.TagString.startswith('ALARM'):
-                            pass
+                        if attr.TagString == 'FUNCTION' and attr.TextString.strip():
+                            inst_func = attr.TextString.strip()
                         if inst_func and inst_loop:
                             inst_list.add('-'.join((inst_func, inst_loop)))
                             break
@@ -151,9 +150,9 @@ def process_inst(inst_list):
     level_keylist = {'LIT', 'LI', 'LIC', 'LCV'}
     pd_keylist = {'PDIT', 'PDT', 'PDI'}  # Pressure Diff Loop
     ai_keylist = {'AE', 'AIT', 'AT', 'AI'}  # Analyse Loop
-    kcv_keylist = {'KS', 'KCV'}  # KCV Loop
+    kcv_keylist = {'KS', 'KCV', 'KVI'}  # KCV Loop
     hcv_keylist = {'HIC', 'HCV'}
-    xcv_keylist = {'XCV', 'XY', 'HS', 'ZI', 'I'}
+    xcv_keylist = {'XCV', 'XY', 'HS', 'XVI', 'I'}
     cv_keylist = level_keylist | hcv_keylist | xcv_keylist
     for key, loop_list in inst_dict.items():
         if key in normal_keylist:
@@ -277,9 +276,10 @@ def update_dwg(dwg_file, pipe_list=[], equip_list=[], str_list=[], inst_list=[])
         equip_dict = convert_list(equip_list, '-')
         str_dict = convert_list(str_list, '-')
         inst_dict = reform_inst(inst_list)
+        insttag_dict = convert_list(inst_list, '-')
         try:
             print(''.join(('Updating...', dwg_file)))
-            acad_doc = acad_docs.Open(file)
+            acad_doc = acad_docs.Open(dwg_file)
             acad_entities = acad_doc.ModelSpace
             counter = 0
             for acad_entity in acad_entities:
@@ -323,12 +323,12 @@ def update_dwg(dwg_file, pipe_list=[], equip_list=[], str_list=[], inst_list=[])
                         inst_loop = ''
                         flag = False
                         for attr in blockref.GetAttributes():
-                            if attr.TagString == 'FUNCTION' and attr.TextString.strip():
-                                inst_func = attr.TextString.strip()
                             if attr.TagString == 'TAG' and attr.TextString.strip():
                                 if attr.TextString.strip()[:1].isalpha():  # Except: PSV-MC..
                                     break
                                 inst_loop, inst_suffix = re.match('(\d+)(\S*)', attr.TextString.strip()).groups()
+                            if attr.TagString == 'FUNCTION' and attr.TextString.strip():
+                                inst_func = attr.TextString.strip()
                             if inst_func and inst_loop:
                                 flag = True
                                 break
@@ -340,18 +340,112 @@ def update_dwg(dwg_file, pipe_list=[], equip_list=[], str_list=[], inst_list=[])
                                         counter += 1
                                         break
                         continue
-            acad_doc.Save()
+                    if block_name.startswith('connector'):
+                        for attr in blockref.GetAttributes():
+                            if attr.TagString == 'OriginOrDestination':
+                                found_flag = False
+                                for change_dict in (insttag_dict, equip_dict, pipe_dict):
+                                    for old_tag, new_tag in change_dict.items():
+                                        if old_tag in attr.TextString:
+                                            found_flag = True
+                                            attr.TextString = attr.TextString.replace(old_tag, new_tag, 1)
+                                            counter += 1
+                                            break
+                                    if found_flag:
+                                        break
+                                break
+                        continue
+
+            acad_doc.SaveAs(new_filename(dwg_file))
             print(str(counter), ' ok')
             acad_doc.Close()
         finally:
             acad_app.Quit()
 
 
+def update_doc(doc_file, tbl_list):
+    word_progid = 'Word.Application'
+    word_app = win32com.client.gencache.EnsureDispatch(word_progid)
+    word_app.Visible = False
+    word_docs = word_app.Documents
+    counter = 0
+    try:
+        print(' '.join(('Updating...', doc_file)))
+        word_doc = word_docs.Open(doc_file)
+        word_range = word_doc.Content
+        for tag_dict in tbl_list:
+            for old_tag, new_tag in tag_dict.items():
+                if word_range.Find.Execute(FindText=old_tag, ReplaceWith=new_tag, MatchCase=True,
+                                           Replace=win32com.client.constants.wdReplaceAll):
+                    counter += 1
+        if counter > 0:
+            word_doc.SaveAs(new_filename(doc_file))
+    finally:
+        print(''.join((str(counter), 'ok')))
+        word_app.Quit()
+
+
+def update_xls(xls_file, tbl_list):
+    excel_progid = 'Excel.Application'
+    excel_app = win32com.client.gencache.EnsureDispatch(excel_progid)
+    excel_app.Visible = False
+    excel_workbooks = excel_app.Workbooks
+    counter = 0
+    try:
+        print(' '.join(('Updating...', xls_file)))
+        excel_workbook = excel_workbooks.Open(xls_file)
+        for excel_sheet in excel_workbook.Sheets:
+            for cell in excel_sheet.UsedRange:
+                found = False
+                #for cell in row:
+                #cell = cell.Cells(1,1)
+                if (not cell.HasFormula) and cell.Value:
+                    for tag_dict in tbl_list:
+                        for old_tag, new_tag in tag_dict.items():
+                            if old_tag in cell.Value:
+                                cell.Value = cell.Value.replace(old_tag, new_tag)
+                                counter += 1
+                                found = True
+                                break
+                        if found:
+                            break
+        if counter > 0:
+            excel_workbook.SaveAs(new_filename(xls_file))
+    finally:
+        print(''.join((str(counter), 'ok')))
+        excel_app.Quit()
+
+
+def new_filename(old_filename):
+    root_name, ext_name = os.path.splitext(old_filename)
+    main_name, sep, date_suffix = root_name.partition('_')
+    today = datetime.date.today()
+    date_suffix = today.strftime('%Y.%m%d')
+    result = ''.join((main_name, sep, date_suffix, ext_name))
+    return result
+
+
 if __name__ == '__main__':
-    file = 'd:\\Work\\Project\\ShunCheng.SNG.Liq\\PnID\\ShunCheng.SNG.Liq.PnID_2014.0121t.dwg'
-    #extract_info_autocad(file)
+    base_file = 'd:\\Work\\Project\\ShunCheng.SNG.Liq\\PnID\\ShunCheng.SNG.Liq.PnID_2014.0123B.dwg'
+    target_file = 'd:\\Work\\Project\\ShunCheng.SNG.Liq\\PnID\\ShunCheng.SNG.Liq.PnID_2014.0121t.dwg'
+    target_path = 'd:\\Work\\Project\\ShunCheng.SNG.Liq\\test'
+    doc_file = 'd:\\Work\\Project\\ShunCheng.SNG.Liq\\doc\\过滤器明细表_2014.0115.doc'
+    xls_file = 'd:\\Work\\Project\\ShunCheng.SNG.Liq\\doc\\2.仪表索引表_2013.1104.xlsx'
+    extract_info_autocad(base_file)
     pipes, equips, strs, insts = read_db()
-    update_dwg(file, pipes, equips, strs, insts)
-    #for tl in read_db():
+    for root, dirs, files in os.walk(target_path):
+        for name in files:
+            pass
+            #update_file()
+            #update_dwg(target_file, pipes, equips, strs, insts)
+            #pipe_dict = convert_list(pipes)
+            #equip_dict = convert_list(equips, '-')
+            #str_dict = convert_list(strs, '-')
+            #inst_dict = convert_list(insts, '-')
+            #tbl_list = [inst_dict, str_dict, pipe_dict, equip_dict]
+            #tbl_list = [equip_dict]
+            #update_doc(doc_file, tbl_list)
+            #update_xls(xls_file, tbl_list)
+            #for tl in read_db():
     #    convert_list(tl)
     #    reform_inst(tl)
