@@ -291,9 +291,8 @@ def update_dwg(dwg_file, pipe_dict, equip_dict, str_dict, inst_dict, insttag_dic
                                 attr.TextString = sep.join((pipe_dict[pipe_tag], other))
                                 counter += 1
                             break
-                    continue
                     # Strainer
-                if block_name.startswith('strainer'):
+                elif block_name.startswith('strainer'):
                     for attr in blockref.GetAttributes():
                         if attr.TagString == 'TAG' and attr.TextString.strip():
                             str_tag, str_suffix = re.match('(\w+-\d+)(\S*)', attr.TextString.strip()).groups()
@@ -301,9 +300,8 @@ def update_dwg(dwg_file, pipe_dict, equip_dict, str_dict, inst_dict, insttag_dic
                                 attr.TextString = ''.join((str_dict[str_tag], str_suffix))
                                 counter += 1
                             break
-                    continue
                     # Equip
-                if block_name.startswith('equip'):
+                elif block_name.startswith('equip'):
                     for attr in blockref.GetAttributes():
                         if attr.TagString == 'TAG' and attr.TextString.strip():
                             equip_tag, equip_suffix = re.match('(\w+-\d+)(\S*)', attr.TextString.strip()).groups()
@@ -311,9 +309,8 @@ def update_dwg(dwg_file, pipe_dict, equip_dict, str_dict, inst_dict, insttag_dic
                                 attr.TextString = ''.join((equip_dict[equip_tag], equip_suffix))
                                 counter += 1
                             break
-                    continue
                     # Inst
-                if block_name in ('di_local', 'sh_pri_front', 'interlock', 'sc_local'):
+                elif block_name in ('di_local', 'sh_pri_front', 'interlock', 'sc_local'):
                     inst_func = ''
                     inst_loop = ''
                     flag = False
@@ -334,8 +331,7 @@ def update_dwg(dwg_file, pipe_dict, equip_dict, str_dict, inst_dict, insttag_dic
                                     attr.TextString = ''.join((inst_dict[inst_func][inst_loop], inst_suffix))
                                     counter += 1
                                     break
-                    continue
-                if block_name.startswith('connector'):
+                elif block_name.startswith('connector'):
                     for attr in blockref.GetAttributes():
                         if attr.TagString == 'OriginOrDestination':
                             found_flag = False
@@ -349,13 +345,13 @@ def update_dwg(dwg_file, pipe_dict, equip_dict, str_dict, inst_dict, insttag_dic
                                 if found_flag:
                                     break
                             break
-                    continue
-
-        acad_doc.SaveAs(new_filename(dwg_file))
+        if counter > 0:
+            acad_doc.SaveAs(new_filename(dwg_file))
         print(str(counter), ' ok')
         acad_doc.Close()
     finally:
-        acad_app.Quit()
+        pass
+        #acad_app.Quit()
 
 
 def update_doc(doc_file, tbl_list):
@@ -377,7 +373,7 @@ def update_doc(doc_file, tbl_list):
             word_doc.SaveAs(new_filename(doc_file))
     finally:
         print(''.join((str(counter), 'ok')))
-        word_app.Quit()
+        #word_app.Quit()
 
 
 def update_xls(xls_file, tbl_list):
@@ -408,7 +404,7 @@ def update_xls(xls_file, tbl_list):
             excel_workbook.SaveAs(new_filename(xls_file))
     finally:
         print(''.join((str(counter), 'ok')))
-        excel_app.Quit()
+        #excel_app.Quit()
 
 
 def new_filename(old_filename):
@@ -423,7 +419,7 @@ def new_filename(old_filename):
 
 def start():
     base_file = 'd:\\Work\\Project\\ShunCheng.SNG.Liq\\PnID\\ShunCheng.SNG.Liq.PnID_2014.0123B.dwg'
-    target_path = 'e:\\MY.Work\\Project\\ShunCheng.SNG.Liq\\pdp'
+    target_path = 'd:\\Work\\Project\\ShunCheng.SNG.Liq\\test'
     #extract_info_autocad(base_file)
     tag_db = read_db()
     pipe_dict = convert_list(tag_db['pipe'])
