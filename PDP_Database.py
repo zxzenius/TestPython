@@ -126,7 +126,7 @@ def process_equip(equip_list):
     equip_dict = dict()
     for equip in equip_list:
         #Equip "EquipCode - Tag Suffix"
-        equip_code, equip_loop, equip_suffix = re.match('(\w+)-(\d+)(\w*)', equip).groups()
+        equip_code, equip_loop, equip_suffix = re.match('(\w+)-(\d+)(.*)', equip).groups()
         update_dict(equip_code, equip_loop, equip_dict)
     sort_dict(equip_dict)
     for key, loop_list in equip_dict.items():
@@ -231,7 +231,7 @@ def db_config():
         'user': 'xydbadmin',
         'password': 'x1nyuan1',
         'host': '10.4.8.106',
-        'database': 'test'
+        'database': 'test_pdp'
     }
     return config
 
@@ -251,7 +251,8 @@ def read_db():
 def convert_list(loop_list, sep=''):
     result_dict = dict()
     for tag_code, old_loop, new_loop in loop_list:
-        result_dict[sep.join((tag_code, str(old_loop)))] = sep.join((tag_code, '{0:#04d}'.format(new_loop)))
+        result_dict[sep.join((tag_code, str(old_loop)))] = sep.join(
+            (tag_code, str(new_loop))) # '{0:#04d}'.format(new_loop)))
     print(result_dict)
     return result_dict
 
@@ -261,7 +262,7 @@ def reform_inst(loop_list):
     for tag_code, old_loop, new_loop in loop_list:
         if tag_code not in result_dict.keys():
             result_dict[tag_code] = dict()
-        result_dict[tag_code][str(old_loop)] = '{0:#04d}'.format(new_loop)
+        result_dict[tag_code][str(old_loop)] = str(new_loop)  # '{0:#04d}'.format(new_loop)
     print(result_dict)
     return result_dict
 
@@ -304,7 +305,7 @@ def update_dwg(dwg_file, pipe_dict, equip_dict, str_dict, inst_dict, insttag_dic
                 elif block_name.startswith('equip'):
                     for attr in blockref.GetAttributes():
                         if attr.TagString == 'TAG' and attr.TextString.strip():
-                            equip_tag, equip_suffix = re.match('(\w+-\d+)(\S*)', attr.TextString.strip()).groups()
+                            equip_tag, equip_suffix = re.match('(\w+-\d+)(.*)', attr.TextString.strip()).groups()
                             if equip_tag in equip_dict.keys():
                                 attr.TextString = ''.join((equip_dict[equip_tag], equip_suffix))
                                 counter += 1
@@ -418,8 +419,8 @@ def new_filename(old_filename):
 
 
 def start():
-    base_file = 'd:\\Work\\Project\\ShunCheng.SNG.Liq\\PnID\\ShunCheng.SNG.Liq.PnID_2014.0123B.dwg'
-    target_path = 'd:\\Work\\Project\\ShunCheng.SNG.Liq\\test'
+    base_file = 'e:\\my.Work\\Project\\200K.SKID\\StdSkid.20K.PID_2014.0226.dwg'
+    target_path = 'e:\\my.Work\\Project\\OUT.SKID'
     #extract_info_autocad(base_file)
     tag_db = read_db()
     pipe_dict = convert_list(tag_db['pipe'])
@@ -486,6 +487,6 @@ def start_compare():
 
 if __name__ == '__main__':
     #for change_tags
-    #start()
+    start()
     #for compare
-    start_compare()
+    #start_compare()
