@@ -445,5 +445,47 @@ def start():
         print('Spent  ', (end_time - start_time).total_seconds(), ' sec.')
 
 
+def compare_pdp(source_path, target_path, output_file):
+    outfile = open(output_file, 'w')
+    comp_list = dict()
+    for root, dirs, files in os.walk(target_path):
+        for name in files:
+            doc_name, doc_suffix = split_pdpfile(name)
+            comp_list[doc_name] = doc_suffix
+    for root, dirs, files in os.walk(source_path):
+        for name in files:
+            doc_name, doc_suffix = split_pdpfile(name)
+            if doc_name in comp_list.keys():
+                new_suffix = comp_list[doc_name]
+                if doc_suffix != new_suffix:
+                    outfile.write(' '.join(('*', doc_name)))
+                    outfile.write('\n')
+                    outfile.write(' -> '.join((doc_suffix, new_suffix)))
+                    outfile.write('\n')
+
+
+def split_pdpfile(filename):
+    main_name, ext_name = os.path.splitext(filename)
+    try:
+        doc_name, doc_suffix = re.match('(.+)_(\d{4}\.\d{4}.*)', main_name).groups()
+    except AttributeError:
+        doc_name, doc_suffix = main_name, ''
+    return doc_name, doc_suffix
+
+
+def start_compare():
+    root_path = 'D:\\Work\\project\\ShunCheng.SNG.Liq\\PDP'
+    source_pdp = '02.0009.PDP_2014.01.B'
+    target_pdp = '02.0009.PDP_2014.02.B'
+    output_file = 'comparelist.txt'
+    source_path = os.path.join(root_path, source_pdp)
+    target_path = os.path.join(root_path, target_pdp)
+    output_file = os.path.join(target_path, output_file)
+    compare_pdp(source_path, target_path, output_file)
+
+
 if __name__ == '__main__':
-    start()
+    #for change_tags
+    #start()
+    #for compare
+    start_compare()
