@@ -334,7 +334,7 @@ def update_dwg(dwg_file, pipe_dict, equip_dict, str_dict, inst_dict, insttag_dic
                                     break
                 elif block_name.startswith('connector'):
                     for attr in blockref.GetAttributes():
-                        if attr.TagString == 'OriginOrDestination':
+                        if attr.TagString in ('OriginOrDestination', 'Service'):
                             found_flag = False
                             for change_dict in (insttag_dict, equip_dict, pipe_dict):
                                 for old_tag, new_tag in change_dict.items():
